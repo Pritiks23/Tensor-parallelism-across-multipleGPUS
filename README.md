@@ -1,14 +1,1 @@
-Token IDs
-   ↓
-Embedding (replicated)
-   ↓
-TP Attention (sharded heads)
-   ↓
-TP MLP (sharded projection)
-   ↓
-Logits (gathered)
-   ↓
-Sampling loop
-
-
-implemented a minimal Megatron-style tensor-parallel transformer block from scratch using PyTorch distributed and NCCL collectives, where attention heads and MLP projections are explicitly sharded across GPUs.”
+I built a minimal tensor-parallel transformer inference system where attention heads and MLP layers are explicitly sharded across GPUs, and NCCL collectives are used to synchronize intermediate activations, simulating how large language models are executed in distributed GPU environments.
