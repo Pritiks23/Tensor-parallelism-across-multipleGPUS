@@ -6,7 +6,7 @@ I built a minimal tensor-parallel transformer inference system where attention h
 
 ## What I built
 
-In this project, I built a **minimal tensor-parallel transformer inference system from scratch using PyTorch distributed and NCCL collectives**.
+In this project, I built a **tensor-parallel transformer inference system from scratch using PyTorch distributed and NCCL collectives**.
 
 Instead of running a transformer on a single GPU, I designed the system so that **multiple GPUs collaboratively execute a single model by splitting computation across devices**.
 
@@ -80,7 +80,7 @@ This project directly implements those core ideas in a simplified but faithful w
 
 ## What the point is
 
-This is not a predictive model project.
+
 
 The goal is to demonstrate that I understand:
 
@@ -89,4 +89,137 @@ The goal is to demonstrate that I understand:
 - how distributed systems coordinate computation using NCCL  
 - how modern LLM inference scales across hardware  
 
-In short, I built a **distributed execution system for transformer models**, not a standalone AI application.
+In short, I built a **distributed execution system for transformer models**
+
+# 🧠 1. Memory scaling (the biggest real benefit)
+
+A single GPU has fixed VRAM.
+
+---
+
+## Example (rough real-world numbers)
+
+Let’s say:
+
+- GPT-style layer weight matrix ≈ 500MB–2GB (depending on size)
+- Activation memory during inference adds more
+
+---
+
+## On 1 GPU:
+
+- VRAM limit: 24 GB (RTX 3090)
+- Model + activations: ~22–26 GB  
+→ may NOT fit or will OOM
+
+---
+
+## On 2 GPUs (tensor parallel):
+
+Each GPU stores ~50% of weights:
+
+- GPU 0: ~12 GB  
+- GPU 1: ~12 GB  
+
+Total model capacity: ~2× larger model fits
+
+---
+
+## On 4 GPUs:
+
+Each GPU holds ~25% of weights  
+→ allows ~4× larger model capacity
+
+---
+
+## ✔ Numeric takeaway
+
+Memory scales approximately linearly with number of GPUs:
+
+\[
+\text{max model size} \propto N_{\text{GPUs}}
+\]
+
+---
+
+# ⚡ 2. Compute speed (throughput improvement)
+
+Now the important nuance: speed is **NOT perfectly linear**.
+
+---
+
+## Ideal case (theoretical)
+
+If work is perfectly split:
+
+- 2 GPUs → 2× speed  
+- 4 GPUs → 4× speed  
+
+---
+
+## Real case (what actually happens)
+
+Because of communication overhead (NCCL):
+
+### 2 GPUs:
+~1.6× to 1.9× speedup
+
+### 4 GPUs:
+~2.8× to 3.5× speedup
+
+---
+
+## Why not perfect scaling?
+
+Because of:
+
+- `all_reduce` synchronization cost  
+- PCIe / NVLink bandwidth limits  
+- kernel launch overhead  
+- imbalance in compute vs communication  
+
+---
+
+## ✔ Numeric takeaway
+
+\[
+\text{speedup} =
+\frac{\text{compute gain}}{\text{communication overhead}}
+\]
+
+So:
+
+| GPUs | Ideal | Realistic |
+|------|------|----------|
+| 1 → 2 | 2.0× | 1.6–1.9× |
+| 1 → 4 | 4.0× | 2.8–3.5× |
+
+---
+
+# 🔥 3. Latency vs throughput tradeoff (very important)
+
+This is subtle but interview-critical.
+
+---
+
+## Latency (single request)
+
+May NOT improve much:
+
+- 1 GPU: 120 ms  
+- 2 GPUs: 80–100 ms  
+
+### Why?
+
+- communication overhead is “always on”
+
+---
+
+## Throughput (many requests)
+
+This is where GPUs shine:
+
+- 1 GPU → 100 tokens/sec  
+- 2 GPUs → 160–190 tokens/sec  
+- 4 GPUs → 280–350 tokens/sec  
+
