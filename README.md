@@ -1,1 +1,11 @@
-I implemented a multi-GPU tensor-parallel inference wrapper around a pretrained GPT-2 model using PyTorch distributed and NCCL collectives. The system runs real text generation while synchronizing hidden states across GPUs to simulate tensor-parallel execution patterns used in large-scale LLM serving.
+Token IDs
+   ↓
+Embedding (replicated)
+   ↓
+TP Attention (sharded heads)
+   ↓
+TP MLP (sharded projection)
+   ↓
+Logits (gathered)
+   ↓
+Sampling loop
