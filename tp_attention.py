@@ -19,7 +19,7 @@ class TPAttention(nn.Module):
         self.local_heads = num_heads // world_size
 
         # Each GPU only stores its shard of QKV projection (TRUE TP)
-        self.qkv = nn.Linear(dim, (3 * dim) // world_size, bias=False)
+        self.qkv = nn.Linear(dim, 3 * dim, bias=False)
 
         self.out = nn.Linear(dim // world_size, dim // world_size, bias=False)
 
