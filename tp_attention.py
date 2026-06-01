@@ -48,12 +48,10 @@ class TPAttention(nn.Module):
         )
     
         out = attn @ v
-
         out = out.reshape(B, T, self.local_heads * self.head_dim)
         
         out = self.out(out)
         
-        # 🔥 KEY FIX: restore full tensor
         dist.all_reduce(out, op=dist.ReduceOp.SUM)
         
         return out
