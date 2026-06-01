@@ -48,13 +48,12 @@ class TPAttention(nn.Module):
         )
     
         out = attn @ v
-    
-        # flatten local heads only
-        out = out.reshape(B, T, self.local_heads * self.head_dim)
-    
-        out = self.out(out)
 
-        # ALL REDUCE to reconstruct full tensor
+        out = out.reshape(B, T, self.local_heads * self.head_dim)
+        
+        out = self.out(out)
+        
+        # 🔥 KEY FIX: restore full tensor
         dist.all_reduce(out, op=dist.ReduceOp.SUM)
         
         return out
