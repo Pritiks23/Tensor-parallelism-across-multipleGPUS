@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.distributed as dist
+import torch.nn.functional as F
 
 
 class TPMLP(nn.Module):
@@ -10,27 +11,27 @@ class TPMLP(nn.Module):
         self.rank = rank
         self.world_size = world_size
 
-        # expand dimension (typical transformer MLP expansion)
         self.hidden = 4 * dim
+
+        assert self.hidden % world_size == 0
+
         self.local_hidden = self.hidden // world_size
 
-        # Column-parallel first projection (sharded output)
+        # Column-parallel projection
         self.w1 = nn.Linear(dim, self.local_hidden, bias=False)
 
-        # Row-parallel second projection (same input, sharded reduction)
+        # Row-parallel projection
         self.w2 = nn.Linear(self.local_hidden, dim, bias=False)
 
     def forward(self, x):
-        # 1. each GPU computes its shard of expanded hidden state
-        h_local = self.w1(x)
+        # (B, T, D) -> (B, T, local_hidden)
+        h = self.w1(x)
+        h = F.gelu(h)
 
-        # 2. activation applied locally (NO communication needed)
-        h_local = torch.nn.functional.gelu(h_local)
+        # (B, T, dim)
+        out = self.w2(h)
 
-        # 3. each GPU computes partial output
-        out_local = self.w2(h_local)
+        # Row-parallel reduction across GPUs
+        dist.all_reduce(out, op=dist.ReduceOp.SUM)
 
-        # 4. sum contributions across GPUs (THIS is the key step)
-        dist.all_reduce(out_local, op=dist.ReduceOp.SUM)
-
-        return out_local
+        return out
