@@ -1,29 +1,57 @@
 import torch
-import torch.nn as nn
 import torch.distributed as dist
+
+from distributed import setup
+from tp_embedder import TPTextEmbedder
 from tokenizer import encode
-from tp_gpt2 import TPGPT2Block
 
 
-class TPTextEmbedder(nn.Module):
-    def __init__(self, dim, heads, world_size, rank):
-        super().__init__()
+def main():
+    rank, world = setup()
 
-        self.rank = rank
-        self.world_size = world_size
+    model = TPTextEmbedder(
+        dim=768,
+        heads=12,
+        world_size=world,
+        rank=rank
+    )
 
-        self.backbone = TPGPT2Block(dim, heads, world_size, rank).cuda()
+    # INPUT TEXTS (real use case)
+    texts = [
+        "Tensor parallelism distributes computation across GPUs",
+        "Machine learning is transforming healthcare",
+        "Distributed systems require synchronization"
+    ]
 
-        # projection to embedding space (useful output)
-        self.proj = nn.Linear(dim, 256).cuda()
+    if rank == 0:
+        inputs = [encode(t).cuda() for t in texts]
+    else:
+        inputs = None
 
-    def forward(self, input_ids):
-        # fake embedding lookup (minimal version)
-        x = torch.randn(1, input_ids.shape[1], 768).cuda()
+    # broadcast structure
+    dist.barrier()
 
-        x = self.backbone(x)
+    if rank == 0:
+        print("\n=== EMBEDDING PIPELINE START ===")
 
-        # pool sequence → single vector
-        x = x.mean(dim=1)
+    embeddings = []
 
-        return self.proj(x)
+    for i, t in enumerate(texts):
+        input_ids = encode(t).cuda()
+
+        emb = model(input_ids)
+
+        embeddings.append(emb.detach().cpu())
+
+        if rank == 0:
+            print(f"Processed: {t[:40]}... → embedding shape {emb.shape}")
+
+    if rank == 0:
+        print("\n=== DONE ===")
+        print("Output embedding vector size:", embeddings[0].shape)
+
+    dist.destroy_process_group()
+
+
+if __name__ == "__main__":
+    main()
