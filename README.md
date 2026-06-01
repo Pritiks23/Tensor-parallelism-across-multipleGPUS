@@ -5,228 +5,82 @@
 <img width="713" height="376" alt="Screen Shot 2026-06-01 at 1 08 37 PM" src="https://github.com/user-attachments/assets/dc58d54a-ef75-4114-881d-c1b4ad16e20c" />
 <img width="871" height="233" alt="Screen Shot 2026-06-01 at 1 11 15 PM" src="https://github.com/user-attachments/assets/5fb98c53-1a67-4910-ad09-1e82c308f10b" />
 
-I built a minimal tensor-parallel transformer inference system where attention heads and MLP layers are explicitly sharded across GPUs, and NCCL collectives are used to synchronize intermediate activations, simulating how large language models are executed in distributed GPU environments.
+# Tensor Parallel Transformer + Distributed Embedding System (PyTorch + NCCL)
 
+## Overview
 
+I built a  **tensor-parallel distributed ML system using PyTorch and NCCL**, consisting of two connected components:
 
-# Tensor Parallel Transformer (PyTorch + NCCL)
+1. A tensor-parallel transformer inference engine
+2. A distributed embedding pipeline built on top of the same GPU parallelism framework
+
+The goal is to emulate how modern LLM systems combine:
+
+- intra-layer model parallelism (tensor parallel transformer blocks)
+- embedding generation pipelines
+- distributed execution using NCCL collectives
+
+This project demonstrates how both transformer computation and embedding workloads can be scaled across multiple GPUs using a unified distributed runtime.
+
+---
+
+# Part 1: Tensor Parallel Transformer Engine
 
 ## What I built
 
-In this project, I built a **tensor-parallel transformer inference system from scratch using PyTorch distributed and NCCL collectives**.
-
-Instead of running a transformer on a single GPU, I designed the system so that **multiple GPUs collaboratively execute a single model by splitting computation across devices**.
+I implemented a simplified GPT-style transformer block where computation is explicitly split across GPUs using tensor parallelism.
 
 ---
 
-## What I am doing at a high level
+## Architecture
 
-I take a transformer-style model and **explicitly partition its computation across GPUs**, so that no single GPU holds or executes the full model.
+### 1. Tensor-Parallel Attention
 
----
-
-### 1. I shard attention across GPUs (tensor parallel attention)
-
-I split attention heads across devices:
-
-- Each GPU is responsible for only a subset of attention heads  
-- Each GPU computes attention independently on its assigned heads  
-- The results are synchronized across GPUs using NCCL communication primitives  
-
-This allows the attention computation to scale horizontally across GPUs.
+- Attention heads are sharded across GPUs
+- Each GPU computes Q, K, V projections for its local heads
+- Scaled dot-product attention is computed independently per rank
+- Outputs are synchronized using `torch.distributed.all_reduce`
 
 ---
 
-### 2. I shard the MLP (feed-forward network)
+### 2. Tensor-Parallel MLP
 
-Instead of each GPU computing the full linear transformation, I split the weight matrices:
-
-- Each GPU holds only a slice of the MLP projection weights  
-- Each GPU computes a partial output independently  
-- I use collective communication (e.g., `all_gather`) to reconstruct the full output tensor  
-
-This mirrors how large-scale transformer systems distribute feed-forward computation.
+- Feed-forward layers are split across GPUs (hidden dimension sharding)
+- Each GPU computes a partial projection
+- GELU activation is applied locally
+- Outputs are aggregated using `all_reduce`
 
 ---
 
-### 3. I use NCCL collectives to synchronize computation
+### 3. Distributed Execution
 
-To make distributed computation coherent, I rely on:
-
-- `all_gather` → to combine partial MLP outputs  
-- `all_reduce` → to synchronize attention outputs across GPUs  
-
-These operations ensure that each GPU contributes to a single unified model output.
+- Each process corresponds to one GPU (`torchrun`)
+- NCCL backend handles inter-GPU communication
+- Each rank executes identical model code over different tensor shards
 
 ---
+## 4 Distributed Embedding Pipeline (run_embed.py)
 
-### 4. I run a full forward pass across multiple GPUs
+## What it does
 
-I execute a transformer block end-to-end where:
+This module demonstrates a second distributed workload:
 
-- Input tensors are replicated across GPUs  
-- Each GPU computes its shard of attention and MLP  
-- Intermediate results are synchronized across devices  
-- The final output represents a fully distributed forward pass  
+- Text input → tokenization → embedding lookup
+- Tensor-parallel embedding projection
+- Multi-GPU synchronization of embedding vectors
 
----
+## Pipeline structure
 
-## Why I built this
+Raw text  
+→ Tokenizer  
+→ Embedding layer  
+→ Tensor-parallel projection  
+→ NCCL synchronization  
+→ Final embedding vector  
+## Output
 
-I built this project to understand and demonstrate **how large language models scale beyond a single GPU**.
+The system produces a consistent transformer forward pass:
 
-Modern transformer models exceed the memory and compute capacity of one device, so they rely on:
-
-- tensor parallelism (splitting computation within a layer)
-- distributed communication (NCCL collectives)
-- synchronized execution across GPUs
-
-This project directly implements those core ideas in a simplified but faithful way.
-
----
-
-## What the point is
-
-
-
-The goal is to demonstrate that I understand:
-
-- how transformer computation is structured internally  
-- how attention and MLP layers can be partitioned across GPUs  
-- how distributed systems coordinate computation using NCCL  
-- how modern LLM inference scales across hardware  
-
-In short, I built a **distributed execution system for transformer models**
-
-# 🧠 1. Memory scaling (the biggest real benefit)
-
-A single GPU has fixed VRAM.
-
----
-
-## Example (rough real-world numbers)
-
-Let’s say:
-
-- GPT-style layer weight matrix ≈ 500MB–2GB (depending on size)
-- Activation memory during inference adds more
-
----
-
-## On 1 GPU:
-
-- VRAM limit: 24 GB (RTX 3090)
-- Model + activations: ~22–26 GB  
-→ may NOT fit or will OOM
-
----
-
-## On 2 GPUs (tensor parallel):
-
-Each GPU stores ~50% of weights:
-
-- GPU 0: ~12 GB  
-- GPU 1: ~12 GB  
-
-Total model capacity: ~2× larger model fits
-
----
-
-## On 4 GPUs:
-
-Each GPU holds ~25% of weights  
-→ allows ~4× larger model capacity
-
----
-
-## ✔ Numeric takeaway
-
-Memory scales approximately linearly with number of GPUs:
-
-\[
-\text{max model size} \propto N_{\text{GPUs}}
-\]
-
----
-
-# ⚡ 2. Compute speed (throughput improvement)
-
-Now the important nuance: speed is **NOT perfectly linear**.
-
----
-
-## Ideal case (theoretical)
-
-If work is perfectly split:
-
-- 2 GPUs → 2× speed  
-- 4 GPUs → 4× speed  
-
----
-
-## Real case (what actually happens)
-
-Because of communication overhead (NCCL):
-
-### 2 GPUs:
-~1.6× to 1.9× speedup
-
-### 4 GPUs:
-~2.8× to 3.5× speedup
-
----
-
-## Why not perfect scaling?
-
-Because of:
-
-- `all_reduce` synchronization cost  
-- PCIe / NVLink bandwidth limits  
-- kernel launch overhead  
-- imbalance in compute vs communication  
-
----
-
-## ✔ Numeric takeaway
-
-\[
-\text{speedup} =
-\frac{\text{compute gain}}{\text{communication overhead}}
-\]
-
-So:
-
-| GPUs | Ideal | Realistic |
-|------|------|----------|
-| 1 → 2 | 2.0× | 1.6–1.9× |
-| 1 → 4 | 4.0× | 2.8–3.5× |
-
----
-
-# 🔥 3. Latency vs throughput tradeoff (very important)
-
-This is subtle but interview-critical.
-
----
-
-## Latency (single request)
-
-May NOT improve much:
-
-- 1 GPU: 120 ms  
-- 2 GPUs: 80–100 ms  
-
-### Why?
-
-- communication overhead is “always on”
-
----
-
-## Throughput (many requests)
-
-This is where GPUs shine:
-
-- 1 GPU → 100 tokens/sec  
-- 2 GPUs → 160–190 tokens/sec  
-- 4 GPUs → 280–350 tokens/sec  
+```text
+Output shape: torch.Size([B, T, 768])
 
