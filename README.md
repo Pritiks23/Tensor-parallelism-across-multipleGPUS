@@ -1,3 +1,10 @@
+<img width="1227" height="142" alt="Screen Shot 2026-06-01 at 1 03 48 PM" src="https://github.com/user-attachments/assets/7def56cb-ebeb-4293-944c-f9ea49f248fe" />
+
+
+
+<img width="713" height="376" alt="Screen Shot 2026-06-01 at 1 08 37 PM" src="https://github.com/user-attachments/assets/dc58d54a-ef75-4114-881d-c1b4ad16e20c" />
+<img width="871" height="233" alt="Screen Shot 2026-06-01 at 1 11 15 PM" src="https://github.com/user-attachments/assets/5fb98c53-1a67-4910-ad09-1e82c308f10b" />
+
 I built a minimal tensor-parallel transformer inference system where attention heads and MLP layers are explicitly sharded across GPUs, and NCCL collectives are used to synchronize intermediate activations, simulating how large language models are executed in distributed GPU environments.
 
 
