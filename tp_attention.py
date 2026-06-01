@@ -25,29 +25,33 @@ class TPAttention(nn.Module):
 
     def forward(self, x):
         B, T, D = x.shape
-
-        qkv = self.qkv(x)
-
-        # reshape local shard
-        local_dim = D // self.world_size
-        qkv = qkv.view(B, T, self.world_size, 3 * local_dim)
-
-        qkv = qkv[:, :, self.rank, :]
+    
+        qkv = self.qkv(x)  # (B, T, 3D)
+    
+        # split into QKV first
         q, k, v = qkv.chunk(3, dim=-1)
-
-        # heads per GPU
-        q = q.view(B, T, self.local_heads, self.head_dim)
-        k = k.view(B, T, self.local_heads, self.head_dim)
-        v = v.view(B, T, self.local_heads, self.head_dim)
-
+    
+        # now shard by heads (NOT by fake reshape)
+        q = q.view(B, T, self.num_heads, self.head_dim)
+        k = k.view(B, T, self.num_heads, self.head_dim)
+        v = v.view(B, T, self.num_heads, self.head_dim)
+    
+        # select local heads correctly
+        start = self.rank * self.local_heads
+        end = start + self.local_heads
+    
+        q = q[:, :, start:end]
+        k = k[:, :, start:end]
+        v = v[:, :, start:end]
+    
         attn = torch.softmax(
             (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim),
             dim=-1
         )
-
+    
         out = attn @ v  # (B, T, local_heads, head_dim)
-
-        out = out.reshape(B, T, local_dim)
-
-        # IMPORTANT: TP is disjoint → NO SUM REDUCTION HERE
+    
+        out = out.reshape(B, T, -1)
+    
+        # IMPORTANT: no all_reduce needed here
         return self.out(out)
