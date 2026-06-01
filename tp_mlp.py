@@ -12,15 +12,14 @@ class TPMLP(nn.Module):
         self.world_size = world_size
 
         self.hidden = 4 * dim
-
         assert self.hidden % world_size == 0
 
         self.local_hidden = self.hidden // world_size
 
-        # Column-parallel projection
+        # Column-parallel projection (sharded output)
         self.w1 = nn.Linear(dim, self.local_hidden, bias=False)
 
-        # Row-parallel projection
+        # Row-parallel projection (maps back to model dim)
         self.w2 = nn.Linear(self.local_hidden, dim, bias=False)
 
     def forward(self, x):
@@ -28,10 +27,10 @@ class TPMLP(nn.Module):
         h = self.w1(x)
         h = F.gelu(h)
 
-        # (B, T, dim)
+        # (B, T, D)
         out = self.w2(h)
 
-        # Row-parallel reduction across GPUs
+        # IMPORTANT: reconstruct full tensor across GPUs
         dist.all_reduce(out, op=dist.ReduceOp.SUM)
 
         return out
