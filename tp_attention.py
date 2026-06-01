@@ -21,7 +21,7 @@ class TPAttention(nn.Module):
         # Each GPU only stores its shard of QKV projection (TRUE TP)
         self.qkv = nn.Linear(dim, 3 * dim, bias=False)
 
-        self.out = nn.Linear(dim // world_size, dim // world_size, bias=False)
+        self.out = nn.Linear(dim // world_size, dim, bias=False)
 
     def forward(self, x):
         B, T, D = x.shape
