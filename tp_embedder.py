@@ -1,3 +1,5 @@
+"""This code takes tokenized text, runs it through a tensor-parallel transformer across multiple GPUs,
+averages the output tokens into one vector, and projects it into a 256-dimensional embedding. """
 import torch
 import torch.nn as nn
 import torch.distributed as dist
