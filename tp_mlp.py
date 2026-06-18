@@ -1,3 +1,4 @@
+"""This TPMLP implements a tensor-parallel feedforward network where the large hidden dimension is split across GPUs, each GPU computes a shard of the MLP independently, and the results are combined using an all-reduce to reconstruct the full output. """
 import torch
 import torch.nn as nn
 import torch.distributed as dist
