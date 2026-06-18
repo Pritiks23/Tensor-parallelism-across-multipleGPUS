@@ -13,7 +13,7 @@ class TPTextEmbedder(nn.Module):
 
         self.rank = rank
         self.world_size = world_size
-
+        # This line creates a tensor-parallel GPT-style transformer block and moves it onto the GPU, meaning each GPU holds its own shard of the model and participates in distributed computation when the forward pass runs.
         self.backbone = TPGPT2Block(dim, heads, world_size, rank).cuda()
 
         # projection to embedding space (useful output)
