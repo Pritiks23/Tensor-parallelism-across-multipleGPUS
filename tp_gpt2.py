@@ -1,3 +1,15 @@
+""" 
+
+This code defines one Transformer block where the input goes through two repeated stages:
+
+Attention stage
+Normalize input
+Run tensor-parallel attention across GPUs
+Add result back (residual connection)
+MLP stage
+Normalize again
+Run tensor-parallel feedforward network across GPUs
+Add result back again (residual connection)"""
 import torch.nn as nn
 from tp_attention import TPAttention
 from tp_mlp import TPMLP
