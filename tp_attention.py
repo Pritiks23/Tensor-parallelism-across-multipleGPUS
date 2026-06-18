@@ -1,3 +1,16 @@
+"""This code implements tensor-parallel self-attention, meaning it splits the computation of a Transformer attention layer across multiple GPUs.
+
+Instead of one GPU computing all attention heads, each GPU:
+
+holds a slice of the attention heads
+computes attention only for those heads
+collaborates with other GPUs to produce the final output
+Why do this?
+
+Because attention layers are expensive in both:
+
+compute (matrix multiplications for Q, K, V and attention scores)
+memory (storing activations + weights) """
 import torch
 import torch.nn as nn
 import torch.distributed as dist
