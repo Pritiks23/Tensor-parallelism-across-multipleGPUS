@@ -9,7 +9,33 @@ Add result back (residual connection)
 MLP stage
 Normalize again
 Run tensor-parallel feedforward network across GPUs
-Add result back again (residual connection)"""
+Add result back again (residual connection)
+
+---
+ 1. Why Attention + MLP both exist
+
+A Transformer layer is built from two complementary operations:
+
+Attention = “find relationships between tokens”
+
+Lets each word look at other words.
+
+
+🟢 MLP = “process each token individually”
+
+After tokens have exchanged info, MLP transforms each token’s features.
+
+It:
+
+refines representation
+adds nonlinearity
+increases model capacity
+
+So MLP handles:
+
+feature transformation per token
+
+"""
 import torch.nn as nn
 from tp_attention import TPAttention
 from tp_mlp import TPMLP
